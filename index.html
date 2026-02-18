@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>TrainTrack | Controle de Treino</title>
+  <meta name="description"
+    content="Aplicativo de controle de treino com progressão de carga, análise comparativa e sincronização com Google Sheets." />
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#6366f1" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="TrainTrack" />
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">💪</span>
+        <span class="logo-text">TrainTrack</span>
+      </div>
+      <div class="sync-status" id="syncStatus">
+        <span class="sync-dot" id="syncDot"></span>
+        <span id="syncLabel">Local</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Tab Navigation -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" id="tab-treino" onclick="switchTab('treino')">
+      <span class="tab-icon">🏋️</span> Treino
+    </button>
+    <button class="tab-btn" id="tab-historico" onclick="switchTab('historico')">
+      <span class="tab-icon">📋</span> Histórico
+    </button>
+    <button class="tab-btn" id="tab-performance" onclick="switchTab('performance')">
+      <span class="tab-icon">📈</span> Performance
+    </button>
+    <button class="tab-btn" id="tab-config" onclick="switchTab('config')">
+      <span class="tab-icon">⚙️</span> Config
+    </button>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="app-main">
+
+    <!-- ===== TAB: TREINO ===== -->
+    <section class="tab-content active" id="content-treino">
+      <!-- Location Bar -->
+      <div class="location-bar" id="locationBar" style="display:none;">
+        <span class="location-icon">📍</span>
+        <span class="location-name" id="locationName">Detectando local...</span>
+        <a class="location-map-link" id="locationMapLink" href="#" target="_blank" rel="noopener">Ver no Maps ↗</a>
+        <button class="location-refresh" onclick="detectLocation()" title="Atualizar localização">🔄</button>
+      </div>
+
+      <div class="session-header" id="sessionHeader">
+        <div class="session-info" id="sessionInfo" style="display:none;">
+          <span class="session-badge">Sessão Ativa</span>
+          <span class="session-date" id="sessionDateDisplay"></span>
+          <span class="session-count" id="sessionCount">0 exercícios</span>
+        </div>
+        <button class="btn btn-primary btn-lg" id="startSessionBtn" onclick="startSession()">
+          <span>▶</span> Iniciar Novo Treino
+        </button>
+        <button class="btn btn-danger" id="finishSessionBtn" style="display:none;" onclick="finishSession()">
+          <span>✓</span> Finalizar Treino
+        </button>
+      </div>
+
+      <!-- Insight Banner -->
+      <div class="insight-banner" id="insightBanner" style="display:none;"></div>
+
+      <!-- Exercise Form -->
+      <div class="exercise-form-card" id="exerciseFormCard" style="display:none;">
+        <div class="form-title">
+          <span class="form-num" id="exerciseNum">Exercício #1</span>
+          <span class="autosave-indicator" id="autosaveIndicator">💾 Auto-save</span>
+        </div>
+
+        <!-- Exercise Name with Autocomplete -->
+        <div class="form-group autocomplete-wrapper">
+          <label for="exerciseName">Nome do Exercício</label>
+          <input type="text" id="exerciseName" class="form-input" placeholder="Ex: Supino Reto Barra" autocomplete="off"
+            oninput="onExerciseInput()" onblur="onExerciseBlur()" />
+          <div class="autocomplete-dropdown" id="autocompleteDropdown"></div>
+        </div>
+
+        <!-- Per-Set Table -->
+        <div class="sets-section">
+          <div class="sets-header">
+            <span class="sets-label">Séries</span>
+            <button class="btn btn-ghost btn-sm" type="button" onclick="addSet()">+ Adicionar Série</button>
+          </div>
+          <div class="sets-table-wrapper">
+            <table class="sets-table">
+              <thead>
+                <tr>
+                  <th>Série</th>
+                  <th>Carga (kg)</th>
+                  <th>Reps</th>
+                  <th>Vol.</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="setsTableBody">
+                <!-- rows injected by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Volume Display -->
+        <div class="volume-display" id="volumeDisplay">
+          <span class="volume-label">Volume Total</span>
+          <span class="volume-value" id="volumeValue">— kg</span>
+          <span class="volume-formula">Σ (Carga × Reps) por série</span>
+        </div>
+
+        <!-- Notes -->
+        <div class="form-group">
+          <label for="notesInput">Notas (opcional)</label>
+          <textarea id="notesInput" class="form-input form-textarea"
+            placeholder="Observações sobre o exercício..."></textarea>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="form-actions">
+          <button class="btn btn-secondary" onclick="saveAndNext()">
+            <span>➕</span> Próximo Exercício
+          </button>
+          <button class="btn btn-ghost" onclick="clearForm()">
+            <span>🗑</span> Limpar
+          </button>
+        </div>
+      </div>
+
+      <!-- Session Exercises List (current session) -->
+      <div id="currentSessionList" class="current-session-list"></div>
+    </section>
+
+    <!-- ===== TAB: HISTÓRICO ===== -->
+    <section class="tab-content" id="content-historico">
+      <div class="section-header">
+        <h2>Histórico de Treinos</h2>
+        <button class="btn btn-ghost btn-sm" onclick="exportCSV()">⬇ Exportar CSV</button>
+      </div>
+      <div id="historicoList" class="historico-list"></div>
+    </section>
+
+    <!-- ===== TAB: PERFORMANCE ===== -->
+    <section class="tab-content" id="content-performance">
+      <div class="section-header">
+        <h2>Performance & Evolução</h2>
+      </div>
+
+      <div class="chart-controls">
+        <div class="form-group">
+          <label for="chartExerciseSelect">Selecionar Exercício</label>
+          <select id="chartExerciseSelect" class="form-input form-select" onchange="renderChart()">
+            <option value="">— Escolha um exercício —</option>
+          </select>
+        </div>
+        <div class="chart-toggle">
+          <button class="toggle-btn active" id="toggleLoad" onclick="setChartMode('load')">Carga (kg)</button>
+          <button class="toggle-btn" id="toggleVolume" onclick="setChartMode('volume')">Volume</button>
+        </div>
+      </div>
+
+      <div class="chart-card" id="chartCard" style="display:none;">
+        <div class="chart-wrapper">
+          <canvas id="performanceChart"></canvas>
+        </div>
+        <div class="chart-stats" id="chartStats"></div>
+      </div>
+
+      <div class="empty-state" id="chartEmpty">
+        <span class="empty-icon">📊</span>
+        <p>Selecione um exercício para ver sua evolução</p>
+      </div>
+    </section>
+
+    <!-- ===== TAB: CONFIG ===== -->
+    <section class="tab-content" id="content-config">
+      <div class="section-header">
+        <h2>Configurações</h2>
+      </div>
+
+      <div class="config-card">
+        <h3>🔗 Sincronização com Google Sheets</h3>
+        <p class="config-desc">Cole a URL do seu Google Apps Script Web App para sincronizar os dados automaticamente
+          com sua planilha.</p>
+        <div class="form-group">
+          <label for="sheetsUrl">URL do Web App</label>
+          <input type="url" id="sheetsUrl" class="form-input" placeholder="https://script.google.com/macros/s/..." />
+        </div>
+        <button class="btn btn-primary" onclick="saveConfig()">Salvar Configuração</button>
+        <button class="btn btn-ghost" onclick="testSheets()">Testar Conexão</button>
+        <div id="configMsg" class="config-msg"></div>
+      </div>
+
+      <div class="config-card">
+        <h3>📖 Como configurar o Google Sheets</h3>
+        <ol class="setup-steps">
+          <li>Crie uma nova planilha no <a href="https://sheets.google.com" target="_blank" class="link">Google
+              Sheets</a></li>
+          <li>Abra <strong>Extensões → Apps Script</strong></li>
+          <li>Cole o código abaixo e salve:</li>
+        </ol>
+        <div class="code-block" id="appsScriptCode">
+          <button class="copy-btn" onclick="copyAppsScript()">📋 Copiar</button>
+          <pre id="appsScriptPre"></pre>
+        </div>
+        <ol class="setup-steps" start="4">
+          <li>Clique em <strong>Implantar → Nova implantação</strong></li>
+          <li>Tipo: <strong>App da Web</strong> | Acesso: <strong>Qualquer pessoa</strong></li>
+          <li>Copie a URL gerada e cole no campo acima</li>
+        </ol>
+      </div>
+
+      <div class="config-card">
+        <h3>🔔 Notificações</h3>
+        <p class="config-desc">Receba notificações na barra do celular quando bater um recorde ou regredir em
+          repetições. Funciona no Chrome Android com o app em background.</p>
+        <div id="notifStatus" class="config-msg"></div>
+        <button class="btn btn-primary" id="notifBtn" onclick="requestNotifPermission()">Ativar Notificações</button>
+      </div>
+
+      <div class="config-card">
+        <h3>📍 Localização</h3>
+        <p class="config-desc">O app detecta automaticamente sua localização ao iniciar um treino e salva no histórico.
+          Você pode abrir no Google Maps para confirmar o local.</p>
+        <div class="config-toggle-row">
+          <label class="toggle-label" for="locationToggle">Detectar localização nos treinos</label>
+          <label class="switch">
+            <input type="checkbox" id="locationToggle" checked onchange="saveLocationPref()" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="config-card danger-zone">
+        <h3>⚠️ Zona de Perigo</h3>
+        <button class="btn btn-danger" onclick="clearAllData()">🗑 Apagar Todos os Dados</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Toast Notifications -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="app.js"></script>
+  <script>
+    // Register Service Worker for PWA / offline support
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => { });
+      });
+    }
+  </script>
+</body>
+
+</html>
